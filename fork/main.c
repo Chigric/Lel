@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 int main()
 {
 	pid_t pid;
@@ -29,10 +30,14 @@ int main()
 		}
 		default: {
 			int *status = NULL; 
-			time_t time_1 = time(NULL);
+			struct timespec mt1, mt2;
+			long double t_1;
+			clock_gettime(CLOCK_REALTIME, &mt1);
 			waitpid(pid, status, 0);
-			time_1 = time(NULL) - time_1;
-			fprintf(datafile, "\n\nkek time = %f\n", (double)time_1);
+			clock_gettime(CLOCK_REALTIME, &mt2);
+			t_1 = 100000000 * (mt2.tv_sec - mt1.tv_sec) + (mt2.tv_nsec - mt1.tv_nsec);
+			t_1 = t_1/1000000;
+			fprintf(datafile, "\n\nkek time = %Lf ms\n", t_1);
 		}
 	}
 	fclose(datafile);
