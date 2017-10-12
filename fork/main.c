@@ -31,11 +31,11 @@ int main()
 		default: {
 			int *status = NULL; 
 			struct timespec mt1, mt2;
-			long double t_1;
+			long double t_1 = 0.0;
 			clock_gettime(CLOCK_REALTIME, &mt1);
 			waitpid(pid, status, 0);
 			clock_gettime(CLOCK_REALTIME, &mt2);
-			t_1 = 100000000 * (mt2.tv_sec - mt1.tv_sec) + (mt2.tv_nsec - mt1.tv_nsec);
+			t_1 = 1000000000 * (mt2.tv_sec - mt1.tv_sec) + (mt2.tv_nsec - mt1.tv_nsec);
 			t_1 = t_1/1000000;
 			fprintf(datafile, "\n\nkek time = %Lf ms\n", t_1);
 		}
