@@ -8,6 +8,7 @@
 #include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #define MAX_PATH 1024
 
@@ -26,25 +27,20 @@ int main(int argc, char **argv)
 	uid_t uid = getuid();
 	uid_t euid= geteuid();
 	struct passwd *pas = getpwuid(uid);
-	struct group *group = getgrgid(uid);
+	struct group *group;
 	char last_mod[MAX_PATH];
-
-/*	if (strlen(dp->d_name)+1 > sizeof(name_u)) {
-
-			strcpy(name_u, 
-	}*/
 
         if ((dirp = opendir(".")) == NULL) {
         	fprintf(stderr, "don't open .\n");
-                return;
+                return 1;
         }
         while ((dp = readdir(dirp)) != NULL) {
         	if (strcmp(dp->d_name, ".") == 0
                     || strcmp(dp->d_name, "..") == 0)
                 	continue;
 		if (stat(dp->d_name, &stbuf) == -1) {
-          		fprintf(stderr, "don't connect with .\n");
-		        return;
+          		fprintf(stderr, "don't connect (stat()) with .\n");
+		        return 2;
 	        }
 		char keys[sizeof('r')*10];
 		//is folder?
@@ -68,10 +64,11 @@ int main(int argc, char **argv)
 		sprintf(name_f, "%s %s %s", 
 			(keys[0] == 'd') ? COLOR_BLUE : ((keys[9]=='x') ? COLOR_GREEN : COLOR_END), 
 				dp->d_name, COLOR_END);
-		printf("%s %hu %s\t %s %7ld %s %s\n", buf, stbuf.st_nlink,
-			(uid < 0 || uid != euid) ? "root " : pas->pw_name,
-			(uid < 0 || uid != euid) ? "root " : "Segmentation fault",
-			stbuf.st_size, last_mod, name_f);
+		group = getgrgid(stbuf.st_gid);
+		printf("%s %3ld %s\t %7s  %7lld %s %s\n", buf, (long)stbuf.st_nlink,
+			(uid == 0 || uid != euid) ? "root " : pas->pw_name,
+			(uid == 0 || uid != euid) ? "root " : group->gr_name,
+			(long long)stbuf.st_size, last_mod, name_f);
 		
 	}
 	closedir(dirp);
