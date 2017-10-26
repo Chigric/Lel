@@ -13,9 +13,14 @@
 #define KEY_D "-d"
 #define KEY_L "-l"
 
+#define COLOR_END   "\x1b[0m"
+#define COLOR_BLUE  "\x1b[34m"
+#define COLOR_GREEN "\x1b[32m"
+
 struct File {
 	char* name;
 	char* text;
+	off_t size;
 };
 //colors
 int main(int argc, char** argv)
