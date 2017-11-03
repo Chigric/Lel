@@ -9,6 +9,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #define MAX_BUF 1024
 #define MAX_NAME 256
@@ -17,53 +19,76 @@
 #define KEY_D "-d"
 #define KEY_L "-l"
 #define KEY_V "-v"
+#define KEY_R "-r"
 //colors
 #define COLOR_END   "\x1b[0m"
 #define COLOR_BLUE  "\x1b[34m"
 #define COLOR_GREEN "\x1b[32m"
 
 #define DEF_NAME "file2.gm11"
+#define DEF_QUAN_MAGIC 3
 
-uint8_t magic[3] = {0x71, 0x77, 0x49};
+typedef enum {
+	K_NONE,
+	K_NEW,
+	K_DELETE,
+	K_LIST,
+	K_VIEW,
+	K_RENAME
+} GM_KEYS;
+
+uint8_t magic[DEF_QUAN_MAGIC] = {0x71, 0x77, 0x49};
 
 struct GM_header {
 	char* name;
-	uint8_t magic[3];
+	uint8_t magic[DEF_QUAN_MAGIC];
 };
 
 struct File {
-	size_t quan_ln;
+	size_t size;
 	char* text;
-	char name[256];
+	char name[MAX_NAME];
 };
 
-void create_SF (void* oSFile, int* quan_files){
-	fwrite(magic, sizeof(uint8_t), sizeof(magic), oSFile);
-	fwrite("\nlist: 0\n", sizeof(char), sizeof("\nlist: 0\n"), oSFile);
+void create_SF (int* oSFile, int* quan_files){
+	//create new save_file
+	*oSFile = open(DEF_NAME, O_RDWR | O_CREAT | O_TRUNC, S_IWRITE | S_IREAD);
+	if (*oSFile < 0) {
+		perror("DON'T CREAT SAVE_FILE");
+		exit(0);
+	}
+	int ptr;
 //	fprintf(oSFile, "\nlist: 0\n");
-	printf("create gm11\n");
+	write(*oSFile, magic, sizeof(magic));
+	write(*oSFile, "\nlist: 1\n", sizeof("\nlist: ") + sizeof(int) + 1);
+	printf("create gm11 %d\n", *oSFile);
 	*quan_files = 0;
+//	close(oSFile);
 }
 
-bool check_SF (int* quan_files, void* oSFile, struct GM_header* gm_her){
-	int i;
+bool check_SF (int* quan_files, int* oSFile, struct GM_header* gm_her){
+	int ptr;
 	if (*quan_files) {
 		//gm11 exist
-		size_t s;
-		s = fread(gm_her->magic, sizeof(uint8_t), sizeof(magic), oSFile);
-		if (s == sizeof(magic)){
-			for (i = 0; i < (int)s; ++i){
-				if (gm_her->magic[i] != magic[i]){
-					printf("IT'S A TRAP (it isn't magic of .gm11)\n");
+		ssize_t siz = NULL;
+		if (siz += read(*oSFile, gm_her->magic, sizeof(magic)) != sizeof(magic)){
+				fprintf(stderr, "CAN'T READ MAGIC\n");
+				perror("\n");
+		}
+		if (siz == sizeof(magic)){
+			for (ptr = 0; ptr < (int)siz; ++ptr){
+				if (gm_her->magic[ptr] != magic[ptr]){
+					fprintf(stderr, "IT'S A TRAP (it isn't magic of .gm11)\n");
 					*quan_files = 0;
 					break;
 				}
 			}
 		}
 		else {
-			printf("IT'S A TRAP (it isn't size of magic of .gm11)\n");
+			fprintf(stderr, "IT'S A TRAP (it isn't size of magic of .gm11)\n");
 			*quan_files = 0;
 		}
+
 		char answer = 'n';
 		if (!(*quan_files)){
 			//UI (rewrite file)
@@ -71,16 +96,13 @@ bool check_SF (int* quan_files, void* oSFile, struct GM_header* gm_her){
 			scanf("%c", &answer);	
 			if (answer != 'n'){
 				printf("You answered %c (yes)\n", answer);
-				fclose(oSFile);
-				oSFile = fopen(DEF_NAME, "wb+");
+				close(*oSFile);
 				create_SF(oSFile, quan_files);
 			} else
 				return false;
 		} else {
 			//quantity of files in gm11
-			char buf[sizeof("list:")];
-			fscanf(oSFile, "%s%d", buf, quan_files);
-			printf("%s %d\n", buf, *quan_files);
+			return true;
 		}
 	} else {
 		//file don't exist
@@ -92,17 +114,22 @@ bool check_SF (int* quan_files, void* oSFile, struct GM_header* gm_her){
 
 int main(int argc, char** argv)
 {
+	//some bufer
+	char buf[MAX_BUF] = {0};
+
 	//name of save_file
 	char *gm11 = (char*) malloc(sizeof(DEF_NAME)+1);
 	if (gm11 == NULL) exit (1);
 	strcpy (gm11, DEF_NAME);
 
+	//some inf about save_file
+	GM_KEYS key = K_NONE;
 	struct GM_header gm_her;
 	gm_her.name = gm11;
-	char buf[MAX_BUF] = {0};
+
+	//directory
         struct dirent *dp;
         DIR *dirp;
-
         if ((dirp = opendir(".")) == NULL) {
                 perror("DON'T OPEN .\t");
                 return 1;
@@ -114,16 +141,47 @@ int main(int argc, char** argv)
 	}
 	closedir(dirp);
 
-	//open or create save_file
-	FILE *oSFile = fopen(gm11, "ab+");
-	fseek(oSFile, 0, SEEK_SET);
+	//open save_file
+	int oSFile;
+	if ((oSFile = open(gm11, O_RDWR)) == -1) {
+		perror("DON'T OPEN SAVE FILE");
+	} else	lseek(oSFile, 0, SEEK_SET);
 
 	//we didn't have save_file
-	if(!check_SF(&number_of_files, oSFile, &gm_her)){
-		printf("Godspeed!\n");
+	if(!check_SF(&number_of_files, &oSFile, &gm_her)){
+		fprintf(stderr, "Godspeed!\n");
 		return 2;
 	}
+	printf("\n%d\n", oSFile);
 
+
+	if (argc > 1) {
+		if (strcmp((char*)KEY_N, argv[1]) == 0)
+		{	//add new_file
+			key = K_NEW;			
+		} else if (strcmp((char*)KEY_D, argv[1]) == 0)
+		{	//delete argv[2]
+			key = K_DELETE;
+		} else if (strcmp((char*)KEY_L, argv[1]) == 0)
+		{	//view list of files in save_file
+			key = K_LIST;
+			lseek(oSFile, sizeof(magic) + sizeof("\nlist: "), SEEK_SET);
+			printf("\n%d\n", oSFile);
+			if (read(oSFile, buf, /*sizeof(int)*/MAX_NAME) /*!= sizeof(int)*/ <= 0){
+				fprintf(stderr, "CAN'T READ SIZE OF LIST");
+				perror("\n");
+			}
+			number_of_files = atoi(buf);
+			printf("%d\n", number_of_files);
+		} else if (strcmp((char*)KEY_V, argv[1]) == 0)
+		{	//view argv[2]
+			key = K_VIEW;
+		} else if (strcmp((char*)KEY_R, argv[1]) == 0)
+		{	//rename save_file
+			key = K_RENAME;
+		}
+	}
+/*
 	//NEW_file
 	struct File new_file;
 	new_file.text = NULL;
@@ -175,9 +233,9 @@ int main(int argc, char** argv)
 		for (i = 0; i < number_of_files; i++)
 			free(list_files[i]);
 		free(list_files);
-	}
+	}*/
 	//close save_file
-	fclose(oSFile);
-	free(gm11);
+	close(oSFile);
+	free(gm11); 
 	return 0;
 }
