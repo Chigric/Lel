@@ -46,10 +46,14 @@ struct GM_header {
 };
 
 struct File {
-	size_t size;
-	char* text;
+	off_t size;
 	char name[MAX_NAME];
 };
+
+void write_st_f(int to_file, struct File from_f) {
+	write(to_file, &(from_f.size), sizeof(off_t));
+	write(to_file, &(from_f.name), sizeof(char)*MAX_NAME);
+}
 
 void create_SF (int* oSFile, int* quan_files){
 	//create new save_file
@@ -61,10 +65,7 @@ void create_SF (int* oSFile, int* quan_files){
 	int ptr = 0;
 	//fprintf(oSFile, "\nlist: 0\n");
 	write(*oSFile, magic, sizeof(magic));
-//	write(*oSFile, "\nlist: 1\n", sizeof("\nlist: \n") + 1);
-	write(*oSFile, "list: ", sizeof("list: ") - 1);
 	write(*oSFile, &ptr, sizeof(int));
-//	write(*oSFile, "\n", sizeof(char));
 	printf("create gm11\n");
 	*quan_files = 0;
 }
@@ -156,7 +157,7 @@ int main(int argc, char** argv)
 	}
 
 	//goto number of list
-	if ((gm_her.off = lseek(oSFile, sizeof(magic) + sizeof("list: ") - 1, SEEK_SET)) == -1)
+	if ((gm_her.off = lseek(oSFile, sizeof(magic), SEEK_SET)) == -1)
 		perror("LSEEK AFTER CHECK");
 
 	if (argc > 1) {
@@ -169,14 +170,43 @@ int main(int argc, char** argv)
 				perror("\n");
 			}
 			++number_of_files;
-
 			lseek(oSFile, -sizeof(int), SEEK_CUR);
 			if (write(oSFile, &number_of_files, sizeof(int)) <= 0){
 				fprintf(stderr, "CAN'T WRITE SIZE OF LIST");
 				perror("\n");
 			}
-//			lseek(oSFile, sizeof("\n"), SEEK_CUR);
-			printf("<<_IN:\targc > 1\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);		
+			printf("<<_IN:\targc > 1 (-n)\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
+			lseek(oSFile, 0, SEEK_END);
+
+			//write new_file
+			int ptr;
+			for (ptr = 2; ptr < argc; ++ptr) {
+				//creat structure of NEW_file
+				struct File new_file;
+				new_file.size = 0;
+				//fill the structure
+				struct stat stbuf;
+				strcpy(new_file.name, argv[ptr]);
+				if (stat(argv[ptr], &stbuf) == -1) {
+        		  		perror("DON'T CONNECT (STAT()) WITH .\n");
+				        return 2;
+		        	}
+				new_file.size = stbuf.st_size;
+				//write structure to SAVE_file
+				write_st_f(oSFile, new_file);
+				//open new_file
+				int oNFile;
+				if ((oNFile = open(new_file.name, O_RDONLY)) == -1)
+					perror("DON'T OPEN NEW FILE");
+				//rewrite text from NEW_file to SAVE_file
+				ssize_t siz;
+				if ((siz = read(oNFile, buf, MAX_BUF)) > 0)
+					write(oSFile, buf, siz);
+				else if (siz == -1)
+					perror("CAN'T READ NEW FILE");
+				//close new_file
+				close(oNFile);
+			}
 
 		} else if (strcmp((char*)KEY_D, argv[1]) == 0)
 		{	//delete argv[2]
@@ -189,8 +219,7 @@ int main(int argc, char** argv)
 				fprintf(stderr, "CAN'T READ SIZE OF LIST");
 				perror("\n");
 			}	
-//			lseek(oSFile, sizeof("\n"), SEEK_CUR);
-			printf("<<_IN:\targc > 1\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
+			printf("<<_IN:\targc > 1 (-l)\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
 
 			
 		} else if (strcmp((char*)KEY_V, argv[1]) == 0)
@@ -205,7 +234,7 @@ int main(int argc, char** argv)
 	//NEW_file
 	struct File new_file;
 	new_file.text = NULL;
-	new_file.quan_ln = 0;
+	new_file.size = 0;
 	char** list_files = NULL;
 	if (argc == 3) {
 		if (strcmp((char*)KEY_N, argv[1]) == 0)
@@ -217,8 +246,8 @@ int main(int argc, char** argv)
         	  		perror("don't connect (stat()) with .\n");
 			        return 2;
 		        }
-			new_file.quan_ln = stbuf.st_size;
-			fprintf(oSFile, "%s %d\n", new_file.name, new_file.quan_ln);
+			new_file.size = stbuf.st_size;
+			fprintf(oSFile, "%s %d\n", new_file.name, new_file.size);
 			//open new_file
 			FILE *oNFile = fopen(new_file.name, "r");
 			if(oNFile == NULL){
@@ -226,7 +255,7 @@ int main(int argc, char** argv)
                 		return 1;
 	        	}
 			size_t s;
-			fprintf(oSFile, "\n\tname file: %s\tsize: %d\n", new_file.name, new_file.quan_ln);
+			fprintf(oSFile, "\n\tname file: %s\tsize: %d\n", new_file.name, new_file.size);
 			while (!feof(oNFile))
 			{
 				s = fread(buf, sizeof(char), MAX_BUF, oNFile);
