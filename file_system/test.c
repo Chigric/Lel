@@ -42,6 +42,7 @@ uint8_t magic[DEF_QUAN_MAGIC] = {0x71, 0x77, 0x49};
 struct GM_header {
 	char* name;
 	uint8_t magic[DEF_QUAN_MAGIC];
+	off_t off;
 };
 
 struct File {
@@ -57,14 +58,14 @@ void create_SF (int* oSFile, int* quan_files){
 		perror("DON'T CREAT SAVE_FILE");
 		exit(0);
 	}
-	int ptr = 1;
+	int ptr = 0;
 	//fprintf(oSFile, "\nlist: 0\n");
 	write(*oSFile, magic, sizeof(magic));
 //	write(*oSFile, "\nlist: 1\n", sizeof("\nlist: \n") + 1);
-	write(*oSFile, "\nlist: ", sizeof("\nlist: ") - 1);
+	write(*oSFile, "list: ", sizeof("list: ") - 1);
 	write(*oSFile, &ptr, sizeof(int));
-//	write(*oSFile, "\n", sizeof("\n"));
-	printf("create gm11 %d\n", *oSFile);
+//	write(*oSFile, "\n", sizeof(char));
+	printf("create gm11\n");
 	*quan_files = 0;
 }
 
@@ -154,26 +155,44 @@ int main(int argc, char** argv)
 		return 2;
 	}
 
+	//goto number of list
+	if ((gm_her.off = lseek(oSFile, sizeof(magic) + sizeof("list: ") - 1, SEEK_SET)) == -1)
+		perror("LSEEK AFTER CHECK");
+
 	if (argc > 1) {
 		if (strcmp((char*)KEY_N, argv[1]) == 0)
 		{	//add new_file
-			key = K_NEW;			
+			key = K_NEW;
+			
+			if (read(oSFile, &number_of_files, sizeof(int)) <= 0){
+				fprintf(stderr, "CAN'T READ SIZE OF LIST");
+				perror("\n");
+			}
+			++number_of_files;
+
+			lseek(oSFile, -sizeof(int), SEEK_CUR);
+			if (write(oSFile, &number_of_files, sizeof(int)) <= 0){
+				fprintf(stderr, "CAN'T WRITE SIZE OF LIST");
+				perror("\n");
+			}
+//			lseek(oSFile, sizeof("\n"), SEEK_CUR);
+			printf("<<_IN:\targc > 1\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);		
+
 		} else if (strcmp((char*)KEY_D, argv[1]) == 0)
 		{	//delete argv[2]
 			key = K_DELETE;
 		} else if (strcmp((char*)KEY_L, argv[1]) == 0)
 		{	//view list of files in save_file
 			key = K_LIST;
-			lseek(oSFile, sizeof(magic) + sizeof("\nlist: ") - 1, SEEK_SET);
-//			if (read(oSFile, buf, /*sizeof(int)*/MAX_NAME) /*!= sizeof(int)*/ <= 0){
-//				fprintf(stderr, "CAN'T READ SIZE OF LIST");
-//				perror("\n");
-//			}
-			read(oSFile, &number_of_files, sizeof(int));
-			//lseek(oSFile, sizeof(magic), SEEK_SET);
-			//read(oSFile, buf, sizeof(int) + sizeof("\nlist: ") - 1);
-		
-			//printf("argc > 1\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
+
+			if (read(oSFile, &number_of_files, sizeof(int)) <= 0){
+				fprintf(stderr, "CAN'T READ SIZE OF LIST");
+				perror("\n");
+			}	
+//			lseek(oSFile, sizeof("\n"), SEEK_CUR);
+			printf("<<_IN:\targc > 1\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
+
+			
 		} else if (strcmp((char*)KEY_V, argv[1]) == 0)
 		{	//view argv[2]
 			key = K_VIEW;
