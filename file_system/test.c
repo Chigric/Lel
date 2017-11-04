@@ -46,14 +46,30 @@ struct GM_header {
 };
 
 struct File {
+	bool deleted;
 	off_t size;
 	char name[MAX_NAME];
 };
 
 void write_st_f(int to_file, struct File from_f) {
+	write(to_file, &(from_f.deleted), sizeof(bool));
 	write(to_file, &(from_f.size), sizeof(off_t));
 	write(to_file, &(from_f.name), sizeof(char)*MAX_NAME);
 }
+
+bool read_st_f(int main_f, struct File* _cur) {
+	read(main_f, &(_cur->deleted), sizeof(_cur->deleted));
+	//cur file is deleted?
+	if (_cur->deleted) return true;
+	read(main_f, &(_cur->size), sizeof(_cur->size));
+	read(main_f, &(_cur->name), sizeof(_cur->name));
+	return false;
+}
+
+void print_st_f(struct File _f) {
+	printf("%d %zu %s\n", _f.deleted, _f.size, _f.name);
+}
+
 
 void create_SF (int* oSFile, int* quan_files){
 	//create new save_file
@@ -175,15 +191,15 @@ int main(int argc, char** argv)
 				fprintf(stderr, "CAN'T WRITE SIZE OF LIST");
 				perror("\n");
 			}
-			printf("<<_IN:\targc > 1 (-n)\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
-			lseek(oSFile, 0, SEEK_END);
+//			printf("<<_IN:\targc > 1 (-n)\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
 
-			//write new_file
+			//write new_file	
 			int ptr;
 			for (ptr = 2; ptr < argc; ++ptr) {
 				//creat structure of NEW_file
 				struct File new_file;
 				new_file.size = 0;
+				new_file.deleted = false;
 				//fill the structure
 				struct stat stbuf;
 				strcpy(new_file.name, argv[ptr]);
@@ -192,17 +208,22 @@ int main(int argc, char** argv)
 				        return 2;
 		        	}
 				new_file.size = stbuf.st_size;
-				//write structure to SAVE_file
+
+				//write new_file to list of files
 				write_st_f(oSFile, new_file);
+
+				//write structure to SAVE_file
+				lseek(oSFile, 0, SEEK_END);
+					write_st_f(oSFile, new_file);
 				//open new_file
 				int oNFile;
 				if ((oNFile = open(new_file.name, O_RDONLY)) == -1)
 					perror("DON'T OPEN NEW FILE");
 				//rewrite text from NEW_file to SAVE_file
 				ssize_t siz;
-				if ((siz = read(oNFile, buf, MAX_BUF)) > 0)
+				while ((siz = read(oNFile, buf, MAX_BUF)) > 0)
 					write(oSFile, buf, siz);
-				else if (siz == -1)
+				if (siz == -1)
 					perror("CAN'T READ NEW FILE");
 				//close new_file
 				close(oNFile);
@@ -218,9 +239,17 @@ int main(int argc, char** argv)
 			if (read(oSFile, &number_of_files, sizeof(int)) <= 0){
 				fprintf(stderr, "CAN'T READ SIZE OF LIST");
 				perror("\n");
-			}	
-			printf("<<_IN:\targc > 1 (-l)\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
+			}
+//			printf("<<_IN:\targc > 1 (-l)\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
 
+			//read list of SAVE_file
+			int cur_;
+			struct File cur_f;
+			for (cur_ = 0; cur_ < number_of_files; ++cur_){
+				//read cur file
+				if (read_st_f(oSFile, &cur_f)) continue;
+				print_st_f(cur_f);
+			}
 			
 		} else if (strcmp((char*)KEY_V, argv[1]) == 0)
 		{	//view argv[2]
@@ -230,53 +259,7 @@ int main(int argc, char** argv)
 			key = K_RENAME;
 		}
 	}
-/*
-	//NEW_file
-	struct File new_file;
-	new_file.text = NULL;
-	new_file.size = 0;
-	char** list_files = NULL;
-	if (argc == 3) {
-		if (strcmp((char*)KEY_N, argv[1]) == 0)
-		{
-			//add NEW_file to Save_file
-			struct stat stbuf;
-			strcpy(new_file.name, argv[2]);
-			if (stat(argv[2], &stbuf) == -1) {
-        	  		perror("don't connect (stat()) with .\n");
-			        return 2;
-		        }
-			new_file.size = stbuf.st_size;
-			fprintf(oSFile, "%s %d\n", new_file.name, new_file.size);
-			//open new_file
-			FILE *oNFile = fopen(new_file.name, "r");
-			if(oNFile == NULL){
-	        	        perror("FAIL WITH NEW_FAIL!\n");
-                		return 1;
-	        	}
-			size_t s;
-			fprintf(oSFile, "\n\tname file: %s\tsize: %d\n", new_file.name, new_file.size);
-			while (!feof(oNFile))
-			{
-				s = fread(buf, sizeof(char), MAX_BUF, oNFile);
-				fwrite(buf, sizeof(char), s, oSFile);
-			}
-			fseek(oSFile, sizeof(uint8_t)*3 + sizeof("\nlist: "), SEEK_SET);
-			//close new_file
-			fclose(oNFile);
-		} else if (strcmp((char*)KEY_D, argv[1]) == 0)
-		{
-			//delete argv[1]
-		} else if (strcmp((char*)KEY_L, argv[1]) == 0)
-		{
-			//view list of files in save_file
-		} else if (strcmp((char*)KEY_V, argv[1]) == 0)
-		{
-			//view argv[2]
-		}
-	}
-
-	if (list_files != NULL)
+/*	if (list_files != NULL)
 	{//free list_files
 		int i;
 		for (i = 0; i < number_of_files; i++)
