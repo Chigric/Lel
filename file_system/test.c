@@ -57,13 +57,15 @@ void create_SF (int* oSFile, int* quan_files){
 		perror("DON'T CREAT SAVE_FILE");
 		exit(0);
 	}
-	int ptr;
-//	fprintf(oSFile, "\nlist: 0\n");
+	int ptr = 1;
+	//fprintf(oSFile, "\nlist: 0\n");
 	write(*oSFile, magic, sizeof(magic));
-	write(*oSFile, "\nlist: 1\n", sizeof("\nlist: ") + sizeof(int) + 1);
+//	write(*oSFile, "\nlist: 1\n", sizeof("\nlist: \n") + 1);
+	write(*oSFile, "\nlist: ", sizeof("\nlist: ") - 1);
+	write(*oSFile, &ptr, sizeof(int));
+//	write(*oSFile, "\n", sizeof("\n"));
 	printf("create gm11 %d\n", *oSFile);
 	*quan_files = 0;
-//	close(oSFile);
 }
 
 bool check_SF (int* quan_files, int* oSFile, struct GM_header* gm_her){
@@ -71,10 +73,11 @@ bool check_SF (int* quan_files, int* oSFile, struct GM_header* gm_her){
 	if (*quan_files) {
 		//gm11 exist
 		ssize_t siz = NULL;
-		if (siz += read(*oSFile, gm_her->magic, sizeof(magic)) != sizeof(magic)){
+		if ((siz = read(*oSFile, gm_her->magic, sizeof(magic))) != sizeof(magic)){
 				fprintf(stderr, "CAN'T READ MAGIC\n");
 				perror("\n");
 		}
+		printf("check_SF:\nsiz  = %zu\tsizeof(magic) = %li\n", siz, sizeof(magic));
 		if (siz == sizeof(magic)){
 			for (ptr = 0; ptr < (int)siz; ++ptr){
 				if (gm_her->magic[ptr] != magic[ptr]){
@@ -100,10 +103,8 @@ bool check_SF (int* quan_files, int* oSFile, struct GM_header* gm_her){
 				create_SF(oSFile, quan_files);
 			} else
 				return false;
-		} else {
-			//quantity of files in gm11
-			return true;
-		}
+		} else 	//quantity of files in gm11
+			return true;	
 	} else {
 		//file don't exist
 		create_SF(oSFile, quan_files);
@@ -152,8 +153,6 @@ int main(int argc, char** argv)
 		fprintf(stderr, "Godspeed!\n");
 		return 2;
 	}
-	printf("\n%d\n", oSFile);
-
 
 	if (argc > 1) {
 		if (strcmp((char*)KEY_N, argv[1]) == 0)
@@ -165,14 +164,16 @@ int main(int argc, char** argv)
 		} else if (strcmp((char*)KEY_L, argv[1]) == 0)
 		{	//view list of files in save_file
 			key = K_LIST;
-			lseek(oSFile, sizeof(magic) + sizeof("\nlist: "), SEEK_SET);
-			printf("\n%d\n", oSFile);
-			if (read(oSFile, buf, /*sizeof(int)*/MAX_NAME) /*!= sizeof(int)*/ <= 0){
-				fprintf(stderr, "CAN'T READ SIZE OF LIST");
-				perror("\n");
-			}
-			number_of_files = atoi(buf);
-			printf("%d\n", number_of_files);
+			lseek(oSFile, sizeof(magic) + sizeof("\nlist: ") - 1, SEEK_SET);
+//			if (read(oSFile, buf, /*sizeof(int)*/MAX_NAME) /*!= sizeof(int)*/ <= 0){
+//				fprintf(stderr, "CAN'T READ SIZE OF LIST");
+//				perror("\n");
+//			}
+			read(oSFile, &number_of_files, sizeof(int));
+			//lseek(oSFile, sizeof(magic), SEEK_SET);
+			//read(oSFile, buf, sizeof(int) + sizeof("\nlist: ") - 1);
+		
+			//printf("argc > 1\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
 		} else if (strcmp((char*)KEY_V, argv[1]) == 0)
 		{	//view argv[2]
 			key = K_VIEW;
