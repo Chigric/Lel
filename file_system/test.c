@@ -16,6 +16,7 @@
 #define MAX_NAME 256
 //keys
 #define KEY_N "-n"
+#define KEY_F "-f"
 #define KEY_D "-d"
 #define KEY_L "-l"
 #define KEY_V "-v"
@@ -31,6 +32,7 @@
 typedef enum {
 	K_NONE,
 	K_NEW,
+	K_FREE,
 	K_DELETE,
 	K_LIST,
 	K_VIEW,
@@ -40,36 +42,74 @@ typedef enum {
 uint8_t magic[DEF_QUAN_MAGIC] = {0x71, 0x77, 0x49};
 
 struct GM_header {
-	char* name;
 	uint8_t magic[DEF_QUAN_MAGIC];
+	char* name;
 	off_t off;
 };
 
 struct File {
 	bool deleted;
+	uint8_t len_name;	
 	off_t size;
-	char name[MAX_NAME];
+	char* name;
 };
 
+void print_st_f(struct File _f) {
+	printf("deleted = %d le_name = %d size = %zu\n%s\n", _f.deleted, _f.len_name, _f.size, _f.name);
+}
+
 void write_st_f(int to_file, struct File from_f) {
-	write(to_file, &(from_f.deleted), sizeof(bool));
-	write(to_file, &(from_f.size), sizeof(off_t));
-	write(to_file, &(from_f.name), sizeof(char)*MAX_NAME);
+ 	if (write(to_file, &(from_f.deleted), sizeof(from_f.deleted)) <= 0){
+		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
+		perror("\n");
+	}
+ 	if (write(to_file, &(from_f.len_name), sizeof(from_f.len_name)) <= 0){
+		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
+		perror("\n");
+	}
+ 	if (write(to_file, &(from_f.size), sizeof(from_f.size)) <= 0){
+		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
+		perror("\n");
+	}
+ 	if (write(to_file, &(from_f.name), sizeof(char) * from_f.len_name) <= 0){
+		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
+		perror("\n");
+	}
+//	write(to_file, &(from_f.deleted), sizeof(bool));
+//	write(to_file, &(from_f.len_name), sizeof(uint8_t));
+//	write(to_file, &(from_f.size), sizeof(off_t));
+//	write(to_file, &(from_f.name), sizeof(char)*MAX_NAME);
 }
 
 bool read_st_f(int main_f, struct File* _cur) {
-	read(main_f, &(_cur->deleted), sizeof(_cur->deleted));
+	if(read(main_f, &(_cur->deleted), sizeof(_cur->deleted)) == 0)
+		//END of main_f
+		return false;
+	if(read(main_f, &(_cur->len_name), sizeof(_cur->len_name)) == 0)
+		return false;
+	if(read(main_f, &(_cur->size), sizeof(_cur->size)) == 0)
+		return false;
+
+	//!!!MALLOC!!!
+	_cur->name = (char*)malloc(1 + (size_t)_cur->len_name);
+	if (_cur->name == NULL) 
+		perror("MALLOC IN READ MAIN FAIL");
+	if(read(main_f, &(_cur->name), sizeof(char) * sizeof(_cur->len_name)) == 0)
+		return false;
 	//cur file is deleted?
-	if (_cur->deleted) return true;
-	read(main_f, &(_cur->size), sizeof(_cur->size));
-	read(main_f, &(_cur->name), sizeof(_cur->name));
+//	if (_cur->deleted) return false;
+	return true;
+}
+
+bool search_st_f(int save_f, char* new_f, struct File* _cur){
+	while(read_st_f(save_f, _cur)){
+		print_st_f(*_cur);
+		if((_cur->deleted == false) && (strcmp(_cur->name, new_f) == 0)){
+			return true;
+		} else lseek(save_f, _cur->size, SEEK_CUR);
+	}
 	return false;
 }
-
-void print_st_f(struct File _f) {
-	printf("%d %zu %s\n", _f.deleted, _f.size, _f.name);
-}
-
 
 void create_SF (int* oSFile, int* quan_files){
 	//create new save_file
@@ -79,7 +119,6 @@ void create_SF (int* oSFile, int* quan_files){
 		exit(0);
 	}
 	int ptr = 0;
-	//fprintf(oSFile, "\nlist: 0\n");
 	write(*oSFile, magic, sizeof(magic));
 	write(*oSFile, &ptr, sizeof(int));
 	printf("create gm11\n");
@@ -95,7 +134,7 @@ bool check_SF (int* quan_files, int* oSFile, struct GM_header* gm_her){
 				fprintf(stderr, "CAN'T READ MAGIC\n");
 				perror("\n");
 		}
-		printf("check_SF:\nsiz  = %zu\tsizeof(magic) = %li\n", siz, sizeof(magic));
+//		printf("check_SF:\nsiz  = %zu\tsizeof(magic) = %li\n", siz, sizeof(magic));
 		if (siz == sizeof(magic)){
 			for (ptr = 0; ptr < (int)siz; ++ptr){
 				if (gm_her->magic[ptr] != magic[ptr]){
@@ -172,9 +211,21 @@ int main(int argc, char** argv)
 		return 2;
 	}
 
-	//goto number of list
+	//goto quality of files of list
 	if ((gm_her.off = lseek(oSFile, sizeof(magic), SEEK_SET)) == -1)
 		perror("LSEEK AFTER CHECK");
+
+/*	printf("uint8_t = %zu\n", sizeof(uint8_t));
+	printf("uint16_t = %zu\n", sizeof(uint16_t));	
+	printf("uint32_t = %zu\n", sizeof(uint32_t));	
+	printf("uint64_t = %zu\n", sizeof(uint64_t));
+	printf("__int128 = %zu\n", sizeof(unsigned __int128));
+	printf("off_t = %zu\n", sizeof(off_t));
+	printf("bool = %zu\n", sizeof(bool));
+	printf("char* = %zu\n", sizeof(char*));
+	printf("int* = %zu\n", sizeof(int*));
+	printf("int = %zu\n", sizeof(int));
+	printf("char = %zu\n", sizeof(char));*/
 
 	if (argc > 1) {
 		if (strcmp((char*)KEY_N, argv[1]) == 0)
@@ -191,7 +242,6 @@ int main(int argc, char** argv)
 				fprintf(stderr, "CAN'T WRITE SIZE OF LIST");
 				perror("\n");
 			}
-//			printf("<<_IN:\targc > 1 (-n)\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
 
 			//write new_file	
 			int ptr;
@@ -200,36 +250,98 @@ int main(int argc, char** argv)
 				struct File new_file;
 				new_file.size = 0;
 				new_file.deleted = false;
+				new_file.len_name = 0x00;
+				new_file.name = NULL;
+
 				//fill the structure
 				struct stat stbuf;
+				new_file.len_name = (uint8_t)strlen(argv[ptr]);
+				//!!!MALLOC!!!
+				new_file.name = (char*)malloc(strlen(argv[ptr]) + 1);
+				if(new_file.name == NULL) perror("HOUSTON, WE HAVE A PROBLEM (-n, malloc)");
 				strcpy(new_file.name, argv[ptr]);
 				if (stat(argv[ptr], &stbuf) == -1) {
         		  		perror("DON'T CONNECT (STAT()) WITH .\n");
 				        return 2;
 		        	}
-				new_file.size = stbuf.st_size;
+				new_file.size = stbuf.st_size; 
 
 				//write new_file to list of files
-				write_st_f(oSFile, new_file);
+//				write_st_f(oSFile, new_file);
 
-				//write structure to SAVE_file
+				//write structure of NEW_file to SAVE_file
+				//search NEW_file in SAVE_file
+				//!!!MALLOC!!
+				struct File* sel_f = (struct File*)malloc(sizeof(struct File));
+				sel_f->size = 0;
+				sel_f->deleted = false;
+				sel_f->len_name = 0x00;
+				sel_f->name = NULL;
+				if (search_st_f(oSFile, new_file.name, sel_f)) {
+					//some UI
+					char answer;
+					printf("File with this name exist. You want rewrite his (y/n)?\n");
+					printf("bool = %d\tsize = %zu\t len_name = %d\n%s\n", (int)sel_f->deleted,
+						sel_f->size, (int)sel_f->len_name, sel_f->name);
+					scanf("%c", &answer);
+					if(answer == 'n'){
+						//goto quality of files of list
+						if ((gm_her.off = lseek(oSFile, sizeof(magic), SEEK_SET)) == -1)
+							perror("LSEEK, AFTER ANSWER (-n)");
+						--number_of_files;
+						if (write(oSFile, &number_of_files, sizeof(int)) <= 0){
+							fprintf(stderr, "CAN'T WRITE SIZE OF LIST, AFTER ANSWER");
+							perror("\n");
+						}
+						//FREE!!!
+						free(sel_f->name);
+						//FREE!!!
+						free(sel_f);
+						if((ptr + 1) < argc)
+							continue;
+						else break;
+					} else {//delete searched file
+						lseek(oSFile, -(sel_f->len_name * sizeof(char) +
+							sizeof(sel_f->size) + sizeof(sel_f->len_name) +
+							sizeof(sel_f->deleted)),
+							SEEK_CUR);
+						sel_f->deleted = true;
+						write(oSFile, &(sel_f->deleted), sizeof(sel_f->deleted));
+					}
+				}
+				//FREE!!!
+				free(sel_f->name);
+				//FREE!!!
+				free(sel_f);
+
+				//write new_file to END of save_file
 				lseek(oSFile, 0, SEEK_END);
-					write_st_f(oSFile, new_file);
+				write_st_f(oSFile, new_file);
 				//open new_file
 				int oNFile;
-				if ((oNFile = open(new_file.name, O_RDONLY)) == -1)
+				if ((oNFile = open(new_file.name, O_RDONLY)) == -1){
+					fprintf(stderr, "ptr = %d\targc = %d\targv[%d] = %s\n", ptr, argc, ptr, argv[ptr]);
 					perror("DON'T OPEN NEW FILE");
+					return 1;
+				}
 				//rewrite text from NEW_file to SAVE_file
 				ssize_t siz;
 				while ((siz = read(oNFile, buf, MAX_BUF)) > 0)
 					write(oSFile, buf, siz);
-				if (siz == -1)
+				if (siz == -1){
 					perror("CAN'T READ NEW FILE");
+					return 1;
+				}
+				//FREE!!!
+				free(new_file.name);
 				//close new_file
 				close(oNFile);
 			}
 
-		} else if (strcmp((char*)KEY_D, argv[1]) == 0)
+		} else if (strcmp((char*)KEY_F, argv[1]) == 0)
+		{	//free argv[2]
+			key = K_FREE;
+		}else if (strcmp((char*)KEY_D, argv[1]) == 0)
 		{	//delete argv[2]
 			key = K_DELETE;
 		} else if (strcmp((char*)KEY_L, argv[1]) == 0)
@@ -240,15 +352,14 @@ int main(int argc, char** argv)
 				fprintf(stderr, "CAN'T READ SIZE OF LIST");
 				perror("\n");
 			}
-//			printf("<<_IN:\targc > 1 (-l)\nbuf\t, number_of_files:\n%s\t, %d\n", buf, number_of_files);
-
 			//read list of SAVE_file
 			int cur_;
 			struct File cur_f;
 			for (cur_ = 0; cur_ < number_of_files; ++cur_){
 				//read cur file
-				if (read_st_f(oSFile, &cur_f)) continue;
+				if (!read_st_f(oSFile, &cur_f)) continue;
 				print_st_f(cur_f);
+				lseek(oSFile, cur_f.size, SEEK_CUR);
 			}
 			
 		} else if (strcmp((char*)KEY_V, argv[1]) == 0)
