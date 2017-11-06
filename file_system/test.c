@@ -59,15 +59,15 @@ void print_st_f(struct File _f) {
 }
 
 void write_st_f(int to_file, struct File from_f) {
- 	if (write(to_file, &(from_f.deleted), sizeof(from_f.deleted)) <= 0){
+ 	if (write(to_file, &(from_f.deleted), sizeof(bool)) <= 0){
 		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
 		perror("\n");
 	}
- 	if (write(to_file, &(from_f.len_name), sizeof(from_f.len_name)) <= 0){
+ 	if (write(to_file, &(from_f.len_name), sizeof(uint8_t)) <= 0){
 		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
 		perror("\n");
 	}
- 	if (write(to_file, &(from_f.size), sizeof(from_f.size)) <= 0){
+ 	if (write(to_file, &(from_f.size), sizeof(off_t)) <= 0){
 		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
 		perror("\n");
 	}
@@ -75,6 +75,7 @@ void write_st_f(int to_file, struct File from_f) {
 		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
 		perror("\n");
 	}
+	printf("write_st_f:\tlen_name = %d\tname = %s\n", from_f.len_name, from_f.name);
 //	write(to_file, &(from_f.deleted), sizeof(bool));
 //	write(to_file, &(from_f.len_name), sizeof(uint8_t));
 //	write(to_file, &(from_f.size), sizeof(off_t));
@@ -82,26 +83,28 @@ void write_st_f(int to_file, struct File from_f) {
 }
 
 bool read_st_f(int main_f, struct File* _cur) {
-	if(read(main_f, &(_cur->deleted), sizeof(_cur->deleted)) == 0)
+	if(read(main_f, &(_cur->deleted), sizeof(bool)) == 0)
 		//END of main_f
 		return false;
-	if(read(main_f, &(_cur->len_name), sizeof(_cur->len_name)) == 0)
+	if(read(main_f, &(_cur->len_name), sizeof(uint8_t)) == 0)
 		return false;
-	if(read(main_f, &(_cur->size), sizeof(_cur->size)) == 0)
+	if(read(main_f, &(_cur->size), sizeof(off_t)) == 0)
 		return false;
 
 	//!!!MALLOC!!!
-	_cur->name = (char*)malloc(1 + (size_t)_cur->len_name);
+	_cur->name = (char*)malloc(1 + /*(size_t)*/_cur->len_name);
 	if (_cur->name == NULL) 
 		perror("MALLOC IN READ MAIN FAIL");
-	if(read(main_f, &(_cur->name), sizeof(char) * sizeof(_cur->len_name)) == 0)
+	if(read(main_f, /*&*/(_cur->name), sizeof(char) * _cur->len_name) == 0)
 		return false;
+	printf("read_st_f:\tlen_name = %d\tname = %s\n", _cur->len_name, _cur->name);
 	//cur file is deleted?
 //	if (_cur->deleted) return false;
 	return true;
 }
 
 bool search_st_f(int save_f, char* new_f, struct File* _cur){
+	printf("%s\n", new_f);
 	while(read_st_f(save_f, _cur)){
 		print_st_f(*_cur);
 		if((_cur->deleted == false) && (strcmp(_cur->name, new_f) == 0)){
@@ -264,10 +267,7 @@ int main(int argc, char** argv)
         		  		perror("DON'T CONNECT (STAT()) WITH .\n");
 				        return 2;
 		        	}
-				new_file.size = stbuf.st_size; 
-
-				//write new_file to list of files
-//				write_st_f(oSFile, new_file);
+				new_file.size = stbuf.st_size;
 
 				//write structure of NEW_file to SAVE_file
 				//search NEW_file in SAVE_file
@@ -302,11 +302,11 @@ int main(int argc, char** argv)
 						else break;
 					} else {//delete searched file
 						lseek(oSFile, -(sel_f->len_name * sizeof(char) +
-							sizeof(sel_f->size) + sizeof(sel_f->len_name) +
-							sizeof(sel_f->deleted)),
+							sizeof(off_t) + sizeof(uint8_t) +
+							sizeof(bool)),
 							SEEK_CUR);
 						sel_f->deleted = true;
-						write(oSFile, &(sel_f->deleted), sizeof(sel_f->deleted));
+						write(oSFile, &(sel_f->deleted), sizeof(bool));
 					}
 				}
 				//FREE!!!
@@ -341,6 +341,19 @@ int main(int argc, char** argv)
 		} else if (strcmp((char*)KEY_F, argv[1]) == 0)
 		{	//free argv[2]
 			key = K_FREE;
+			
+			struct File how;
+			how.deleted = false;
+			how.len_name = 3;
+			how.size = 0;
+			how.name = (char*)malloc(sizeof(char) * 3);
+			strcpy(how.name, "123");
+			write_st_f(oSFile, how);
+			print_st_f(how);
+			lseek(oSFile, gm_her.off, SEEK_SET);
+			read_st_f(oSFile, &how);
+			print_st_f(how);
+			free(how.name);
 		}else if (strcmp((char*)KEY_D, argv[1]) == 0)
 		{	//delete argv[2]
 			key = K_DELETE;
@@ -352,6 +365,7 @@ int main(int argc, char** argv)
 				fprintf(stderr, "CAN'T READ SIZE OF LIST");
 				perror("\n");
 			}
+			printf("total: %d\n", number_of_files);
 			//read list of SAVE_file
 			int cur_;
 			struct File cur_f;
