@@ -25,7 +25,9 @@
 #define COLOR_END   "\x1b[0m"
 #define COLOR_BLUE  "\x1b[34m"
 #define COLOR_GREEN "\x1b[32m"
+#define COLOR_CYAN  "\x1b[36m"
 
+#define MAX_COLOR 8
 #define DEF_NAME "file2.gm11"
 #define DEF_QUAN_MAGIC 3
 
@@ -55,7 +57,20 @@ struct File {
 };
 
 void print_st_f(struct File _f) {
-	printf("deleted = %d le_name = %d size = %zu\n%s\n", _f.deleted, _f.len_name, _f.size, _f.name);
+	char color_buf[MAX_NAME + MAX_COLOR];
+	sprintf(color_buf, "%s %d %s", COLOR_CYAN, _f.deleted, COLOR_END);
+	printf("deleted = %s ", color_buf);
+
+	sprintf(color_buf, "%s %d %s", COLOR_CYAN, _f.len_name, COLOR_END);
+	printf("size of name = %s ", color_buf);
+	
+	sprintf(color_buf, "%s %zu %10s", COLOR_CYAN, _f.size, COLOR_END);
+	printf("size of file = %s ", color_buf);
+
+	sprintf(color_buf, "%s %s %s", COLOR_GREEN, _f.name, COLOR_END);
+	printf("%s\n", color_buf);
+//	printf("%s\tdeleted = %d size of name = %d size of file = %zu\n", 
+//		_f.name,_f.deleted, _f.len_name, _f.size);
 }
 
 void write_st_f(int to_file, struct File from_f) {
@@ -71,15 +86,10 @@ void write_st_f(int to_file, struct File from_f) {
 		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
 		perror("\n");
 	}
- 	if (write(to_file, &(from_f.name), sizeof(char) * from_f.len_name) <= 0){
+ 	if (write(to_file, (from_f.name), sizeof(char) * from_f.len_name) <= 0){
 		fprintf(stderr, "CAN'T WRITE NEW STRUCTURE");
 		perror("\n");
 	}
-	printf("write_st_f:\tlen_name = %d\tname = %s\n", from_f.len_name, from_f.name);
-//	write(to_file, &(from_f.deleted), sizeof(bool));
-//	write(to_file, &(from_f.len_name), sizeof(uint8_t));
-//	write(to_file, &(from_f.size), sizeof(off_t));
-//	write(to_file, &(from_f.name), sizeof(char)*MAX_NAME);
 }
 
 bool read_st_f(int main_f, struct File* _cur) {
@@ -92,21 +102,18 @@ bool read_st_f(int main_f, struct File* _cur) {
 		return false;
 
 	//!!!MALLOC!!!
-	_cur->name = (char*)malloc(1 + /*(size_t)*/_cur->len_name);
+	_cur->name = (char*)malloc(1 + _cur->len_name);
 	if (_cur->name == NULL) 
 		perror("MALLOC IN READ MAIN FAIL");
-	if(read(main_f, /*&*/(_cur->name), sizeof(char) * _cur->len_name) == 0)
+	if(read(main_f, (_cur->name), sizeof(char) * _cur->len_name) == 0)
 		return false;
-	printf("read_st_f:\tlen_name = %d\tname = %s\n", _cur->len_name, _cur->name);
 	//cur file is deleted?
 //	if (_cur->deleted) return false;
 	return true;
 }
 
 bool search_st_f(int save_f, char* new_f, struct File* _cur){
-	printf("%s\n", new_f);
 	while(read_st_f(save_f, _cur)){
-		print_st_f(*_cur);
 		if((_cur->deleted == false) && (strcmp(_cur->name, new_f) == 0)){
 			return true;
 		} else lseek(save_f, _cur->size, SEEK_CUR);
@@ -137,7 +144,6 @@ bool check_SF (int* quan_files, int* oSFile, struct GM_header* gm_her){
 				fprintf(stderr, "CAN'T READ MAGIC\n");
 				perror("\n");
 		}
-//		printf("check_SF:\nsiz  = %zu\tsizeof(magic) = %li\n", siz, sizeof(magic));
 		if (siz == sizeof(magic)){
 			for (ptr = 0; ptr < (int)siz; ++ptr){
 				if (gm_her->magic[ptr] != magic[ptr]){
@@ -188,26 +194,13 @@ int main(int argc, char** argv)
 	struct GM_header gm_her;
 	gm_her.name = gm11;
 
-	//directory
-        struct dirent *dp;
-        DIR *dirp;
-        if ((dirp = opendir(".")) == NULL) {
-                perror("DON'T OPEN .\t");
-                return 1;
-        }
 	int number_of_files = NULL;
-        while ((dp = readdir(dirp)) != NULL){
-               	if (strcmp(dp->d_name, gm11) == 0)
-			number_of_files = 1;
-	}
-	closedir(dirp);
-
 	//open save_file
 	int oSFile;
 	if ((oSFile = open(gm11, O_RDWR)) == -1) {
 		perror("DON'T OPEN SAVE FILE");
-	} else	lseek(oSFile, 0, SEEK_SET);
-
+	} else number_of_files = 1;
+	
 	//we didn't have save_file
 	if(!check_SF(&number_of_files, &oSFile, &gm_her)){
 		fprintf(stderr, "Godspeed!\n");
@@ -218,27 +211,18 @@ int main(int argc, char** argv)
 	if ((gm_her.off = lseek(oSFile, sizeof(magic), SEEK_SET)) == -1)
 		perror("LSEEK AFTER CHECK");
 
-/*	printf("uint8_t = %zu\n", sizeof(uint8_t));
-	printf("uint16_t = %zu\n", sizeof(uint16_t));	
-	printf("uint32_t = %zu\n", sizeof(uint32_t));	
-	printf("uint64_t = %zu\n", sizeof(uint64_t));
-	printf("__int128 = %zu\n", sizeof(unsigned __int128));
-	printf("off_t = %zu\n", sizeof(off_t));
-	printf("bool = %zu\n", sizeof(bool));
-	printf("char* = %zu\n", sizeof(char*));
-	printf("int* = %zu\n", sizeof(int*));
-	printf("int = %zu\n", sizeof(int));
-	printf("char = %zu\n", sizeof(char));*/
+	//read number of files in SAVE_file
+	if (read(oSFile, &number_of_files, sizeof(int)) <= 0){
+		fprintf(stderr, "CAN'T READ SIZE OF LIST");
+		perror("\n");
+	}
 
 	if (argc > 1) {
 		if (strcmp((char*)KEY_N, argv[1]) == 0)
 		{	//add new_file
 			key = K_NEW;
 			
-			if (read(oSFile, &number_of_files, sizeof(int)) <= 0){
-				fprintf(stderr, "CAN'T READ SIZE OF LIST");
-				perror("\n");
-			}
+			//augment number of files in SAVE_file
 			++number_of_files;
 			lseek(oSFile, -sizeof(int), SEEK_CUR);
 			if (write(oSFile, &number_of_files, sizeof(int)) <= 0){
@@ -246,7 +230,7 @@ int main(int argc, char** argv)
 				perror("\n");
 			}
 
-			//write new_file	
+			//write new_file
 			int ptr;
 			for (ptr = 2; ptr < argc; ++ptr) {
 				//creat structure of NEW_file
@@ -281,8 +265,6 @@ int main(int argc, char** argv)
 					//some UI
 					char answer;
 					printf("File with this name exist. You want rewrite his (y/n)?\n");
-					printf("bool = %d\tsize = %zu\t len_name = %d\n%s\n", (int)sel_f->deleted,
-						sel_f->size, (int)sel_f->len_name, sel_f->name);
 					scanf("%c", &answer);
 					if(answer == 'n'){
 						//goto quality of files of list
@@ -314,16 +296,15 @@ int main(int argc, char** argv)
 				//FREE!!!
 				free(sel_f);
 
-				//write new_file to END of save_file
-				lseek(oSFile, 0, SEEK_END);
-				write_st_f(oSFile, new_file);
 				//open new_file
 				int oNFile;
 				if ((oNFile = open(new_file.name, O_RDONLY)) == -1){
-					fprintf(stderr, "ptr = %d\targc = %d\targv[%d] = %s\n", ptr, argc, ptr, argv[ptr]);
 					perror("DON'T OPEN NEW FILE");
 					return 1;
 				}
+				//write new_file to END of save_file
+				lseek(oSFile, 0, SEEK_END);
+				write_st_f(oSFile, new_file);
 				//rewrite text from NEW_file to SAVE_file
 				ssize_t siz;
 				while ((siz = read(oNFile, buf, MAX_BUF)) > 0)
@@ -341,30 +322,38 @@ int main(int argc, char** argv)
 		} else if (strcmp((char*)KEY_F, argv[1]) == 0)
 		{	//free argv[2]
 			key = K_FREE;
-			
-			struct File how;
-			how.deleted = false;
-			how.len_name = 3;
-			how.size = 0;
-			how.name = (char*)malloc(sizeof(char) * 3);
-			strcpy(how.name, "123");
-			write_st_f(oSFile, how);
-			print_st_f(how);
-			lseek(oSFile, gm_her.off, SEEK_SET);
-			read_st_f(oSFile, &how);
-			print_st_f(how);
-			free(how.name);
+			//decrement
 		}else if (strcmp((char*)KEY_D, argv[1]) == 0)
 		{	//delete argv[2]
 			key = K_DELETE;
+
+			int ptr;
+			for (ptr = 2; ptr < argc; ++ptr){
+				//!!!MALLOC!!
+				struct File* sel_f = (struct File*)malloc(sizeof(struct File));
+				sel_f->size = 0;
+				sel_f->deleted = false;
+				sel_f->len_name = 0x00;
+				sel_f->name = NULL;
+				if (search_st_f(oSFile, argv[ptr], sel_f)) 
+				{ 	//delete searched file
+					lseek(oSFile, -(sel_f->len_name * sizeof(char) +
+						sizeof(off_t) + sizeof(uint8_t) +
+						sizeof(bool)),
+						SEEK_CUR);
+					sel_f->deleted = true;
+					write(oSFile, &(sel_f->deleted), sizeof(bool));
+				} else 
+					printf("save file havn't %s file\n", sel_f->name);
+				//FREE!!!
+				free(sel_f->name);
+				//FREE!!!
+				free(sel_f);
+			}
 		} else if (strcmp((char*)KEY_L, argv[1]) == 0)
 		{	//view list of files in save_file
 			key = K_LIST;
 
-			if (read(oSFile, &number_of_files, sizeof(int)) <= 0){
-				fprintf(stderr, "CAN'T READ SIZE OF LIST");
-				perror("\n");
-			}
 			printf("total: %d\n", number_of_files);
 			//read list of SAVE_file
 			int cur_;
@@ -379,18 +368,44 @@ int main(int argc, char** argv)
 		} else if (strcmp((char*)KEY_V, argv[1]) == 0)
 		{	//view argv[2]
 			key = K_VIEW;
+			
+			int ptr;
+			for (ptr = 2; ptr < argc; ++ptr) {
+				//!!!MALLOC!!
+				struct File* sel_f = (struct File*)malloc(sizeof(struct File));
+				sel_f->size = 0;
+				sel_f->deleted = false;
+				sel_f->len_name = 0x00;
+				sel_f->name = NULL;
+				if (search_st_f(oSFile, argv[ptr], sel_f)){
+					print_st_f(*sel_f);
+					ssize_t siz;
+					off_t size_f = sel_f->size;
+					while (size_f > 0){
+						if ((siz = read(oSFile, buf, MAX_BUF)) < 0){
+							perror("READ SAVE FILE");
+							return 1;
+						}
+						printf("%s", buf);
+						size_f -= siz;
+					}
+					printf("\n");
+					if (siz == -1){
+						perror("CAN'T READ NEW FILE");
+						return 1;
+					}
+				} else 
+					printf("save file havn't %s file\n", argv[ptr]);
+				//FREE!!!
+				free(sel_f->name);
+				//FREE!!!
+				free(sel_f);
+			}
 		} else if (strcmp((char*)KEY_R, argv[1]) == 0)
 		{	//rename save_file
 			key = K_RENAME;
 		}
 	}
-/*	if (list_files != NULL)
-	{//free list_files
-		int i;
-		for (i = 0; i < number_of_files; i++)
-			free(list_files[i]);
-		free(list_files);
-	}*/
 	//close save_file
 	close(oSFile);
 	free(gm11); 
