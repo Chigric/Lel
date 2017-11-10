@@ -93,28 +93,30 @@ void write_st_f(int to_file, struct File from_f) {
 bool read_st_f(int main_f, struct File* _cur) {
 	if(read(main_f, &(_cur->deleted), sizeof(bool)) == 0){
 		//END of main_f
-		printf("#1\n");
+		fprintf(stderr, "%d ", main_f);
+		perror("#1\n");
 		return false;
 	}
 	if(read(main_f, &(_cur->len_name), sizeof(uint8_t)) == 0){
-		printf("#2\n");
+		perror("#2\n");
 		return false;
 	}
 	if(read(main_f, &(_cur->size), sizeof(off_t)) == 0){
-		printf("#3\n");	
+		perror("#3\n");	
 		return false;
 	}
-	if (_cur->name == NULL)
+	if (_cur->name != NULL)
 		//!!!MALLOC!!!
-		_cur->name = (char*)realloc(_cur->name, 1 + _cur->len_name);
-	if (_cur->name == NULL) 
+		free(_cur->name);
+	_cur->name = (char*)malloc(1 + _cur->len_name);	
+	if (_cur->name == NULL){ 
 		perror("MALLOC IN READ MAIN FAIL");
+		exit(2);
+	}
 	if(read(main_f, (_cur->name), sizeof(char) * _cur->len_name) == 0) {
 		perror("#4\n");
 		return false;
 	}
-	//cur file is deleted?
-//	if (_cur->deleted) return false;
 	return true;
 }
 
@@ -125,6 +127,9 @@ void rewrite_mu_f(int oSFile, off_t size_ff, off_t size_tf){
 	//!!!MALLOC!!!
 	char* buf_plus = (char*)malloc(size_buf_plus);
 	if (buf_plus == NULL) {
+		/////////////////////////////////////////
+		perror("MALLOC(BUF_SIZE)");
+		/////////////////////////////////////////
 		size_buf_plus = MAX_BUF;
 		buf_plus = (char*)malloc(size_buf_plus);
 		if (buf_plus == NULL) {
@@ -132,19 +137,24 @@ void rewrite_mu_f(int oSFile, off_t size_ff, off_t size_tf){
 			exit(2);
 		}
 	}
+	////////////////////////////////////////////////////////////////////////////////////
+	fprintf(stderr, "size_buf_plus = %zu\n", size_buf_plus);
+	////////////////////////////////////////////////////////////////////////////////////
+	
 	//rewrite block of NOT deleted files
-	while (size_ff -= (read(oSFile, buf_plus, size_buf_plus)) == 0){
+	size_ff -= read(oSFile, buf_plus, size_buf_plus);
+	do {
 		lseek(oSFile, -(size_tf + size_buf_plus), SEEK_CUR);
 		write(oSFile, buf_plus, size_buf_plus);
 		lseek(oSFile, size_tf, SEEK_CUR);
 		if (size_buf_plus > size_ff) size_buf_plus = size_ff;
-	}
+	} while (size_ff -= (read(oSFile, buf_plus, size_buf_plus)) > 0);
 	//FREE!!!
 	free(buf_plus);
-	
 }
 
-bool search_st_f(int save_f, char* new_f, struct File* _cur){
+bool search_st_f(int save_f, char* new_f, struct File* _cur, struct GM_header* gm){
+	lseek(save_f, (gm->off + sizeof(int)), SEEK_SET);
 	while(read_st_f(save_f, _cur)){
 		if((_cur->deleted == false) && (strcmp(_cur->name, new_f) == 0)){
 			return true;
@@ -253,18 +263,18 @@ int main(int argc, char** argv)
 		if (strcmp((char*)KEY_N, argv[1]) == 0)
 		{	//add new_file
 			key = K_NEW;
-			
-			//augment number of files in SAVE_file
-			++number_of_files;
-			lseek(oSFile, -sizeof(int), SEEK_CUR);
-			if (write(oSFile, &number_of_files, sizeof(int)) <= 0){
-				fprintf(stderr, "CAN'T WRITE SIZE OF LIST");
-				perror("\n");
-			}
 
 			//write new_file
 			int ptr;
 			for (ptr = 2; ptr < argc; ++ptr) {
+				lseek(oSFile, gm_her.off, SEEK_SET);
+				//augment number of files in SAVE_file
+				++number_of_files;
+				if (write(oSFile, &number_of_files, sizeof(int)) <= 0){
+					fprintf(stderr, "CAN'T WRITE SIZE OF LIST");
+					perror("\n");
+				}
+
 				//creat structure of NEW_file
 				struct File new_file;
 				new_file.size = 0;
@@ -277,11 +287,12 @@ int main(int argc, char** argv)
 				new_file.len_name = (uint8_t)strlen(argv[ptr]);
 				//!!!MALLOC!!!
 				new_file.name = (char*)malloc(strlen(argv[ptr]) + 1);
-				if(new_file.name == NULL) perror("HOUSTON, WE HAVE A PROBLEM (-n, malloc)");
+				if(new_file.name == NULL) {
+					perror("HOUSTON, WE HAVE A PROBLEM (-n, malloc)"); return 1;
+				}
 				strcpy(new_file.name, argv[ptr]);
 				if (stat(argv[ptr], &stbuf) == -1) {
-        		  		perror("DON'T CONNECT (STAT()) WITH . (-n)\n");
-				        return 2;
+        		  		perror("DON'T CONNECT (STAT()) WITH . (-n)\n");	return 2;
 		        	}
 				new_file.size = stbuf.st_size;
 
@@ -293,11 +304,11 @@ int main(int argc, char** argv)
 				sel_f->deleted = false;
 				sel_f->len_name = 0x00;
 				sel_f->name = NULL;
-				if (search_st_f(oSFile, new_file.name, sel_f)) {
+				if (search_st_f(oSFile, new_file.name, sel_f, &gm_her)) {
 					//some UI
 					char answer;
 					printf("File with this name exist. You want rewrite his (y/n)?\n");
-					scanf("%c", &answer);
+					scanf("%c%*c", &answer);
 					if(answer == 'n'){
 						//goto  quantity of files of list
 						if ((gm_her.off = lseek(oSFile, sizeof(magic), SEEK_SET)) == -1)
@@ -311,9 +322,7 @@ int main(int argc, char** argv)
 						free(sel_f->name);
 						//FREE!!!
 						free(sel_f);
-						if((ptr + 1) < argc)
-							continue;
-						else break;
+						continue;
 					} else {//delete searched file
 						lseek(oSFile, -(sel_f->len_name * sizeof(char) +
 							sizeof(off_t) + sizeof(uint8_t) +
@@ -364,7 +373,7 @@ int main(int argc, char** argv)
 			cur_f.name = NULL;
 			//some variables (=_=)
 			int quan_del_files = 0;
-			int len_del_files = 0;
+			off_t len_del_files = 0;
 			int quan_tf = 0;
 			int quan_ff = 0;
 			off_t size_ff = 0;
@@ -376,52 +385,93 @@ int main(int argc, char** argv)
 					print_st_f(cur_f);
 					break;
 				}
-				print_st_f(cur_f);
-				if (!cur_f.deleted) {
-					if(quan_tf > 0) {
+//				print_st_f(cur_f);
+				
+				if (cur_f.deleted) {
+					//true
+					if (quan_ff > 0) {
+						printf("true:\nsize_ff = %zu\t size_tf = %zu\n", size_ff, size_tf);
+						rewrite_mu_f(oSFile, size_ff, size_tf);
+						//quantity of deleted files in this block
+						quan_del_files += quan_tf;
+						//as we add-on size_tf to next structure
+						//len_del_files += size_tf;
+
+						//move next deleted(true) structure to last NOT deleted structure
+						//(i.e. to back)
+						//Back To The Future, Morty
+						cur_f.size += size_tf;
+						write_st_f(oSFile, cur_f);
+						//zeroing out
+						size_ff = 0; quan_ff = 0;
+						size_tf = 0; quan_tf = 0;
+					}
+					
+					++quan_tf;
+					size_tf += size_st_f(&cur_f);
+					////////////////////////////////////////////////////
+					fprintf(stderr, "size_tf = %zu\t", size_tf);
+					////////////////////////////////////////////////////
+
+					lseek(oSFile, cur_f.size, SEEK_CUR);
+					size_tf += cur_f.size;
+
+					////////////////////////////////////////////////////
+					fprintf(stderr, "size_tf = %zu\n", size_tf);
+					////////////////////////////////////////////////////	
+				} else {
+					 if(quan_tf > 0) {
+						//false
 						++quan_ff;
 						size_ff += size_st_f(&cur_f);
-						size_ff += lseek(oSFile, cur_f.size, SEEK_CUR);
+						////////////////////////////////////////////////////
+						fprintf(stderr, "size_ff = %zu\t", size_ff);
+						////////////////////////////////////////////////////
+						
+						lseek(oSFile, cur_f.size, SEEK_CUR);
+						size_ff += cur_f.size;
+
+						////////////////////////////////////////////////////
+						fprintf(stderr, "size_ff = %zu\n", size_ff);
+						////////////////////////////////////////////////////
 						//It's last deleted(false) file
 						if ((cur_ + 1 == number_of_files)){
 							rewrite_mu_f(oSFile, size_ff, size_tf);
 							quan_del_files += quan_tf;
 							len_del_files += size_tf;
+							//zeroing out
+							quan_tf = 0; size_tf = 0;
 						}
-					}
-				} else {
-					if (quan_ff > 0){
-						rewrite_mu_f(oSFile, size_ff, size_tf);
-						//move next deleted(tree) structure to last NOT deleted structure
-						//(i.e. to back)
-						//Back To The Future, Morty
-						cur_f.size += size_tf;
-						write_st_f(oSFile, cur_f);
-						//quantity of deleted files in this block
-						quan_del_files += quan_tf;
-						len_del_files += size_tf;
-						//zeroing out
-						size_ff = 0; quan_ff = 0;
-						//+ "next" deleted(true) structur
-						size_tf = size_st_f(&cur_f);
-						size_tf += lseek(oSFile, cur_f.size, SEEK_CUR);
-						quan_tf = 1;
 					} else {
-						++quan_tf;
-						size_tf += size_st_f(&cur_f);
-						size_tf += lseek(oSFile, cur_f.size, SEEK_CUR);	
+						lseek(oSFile, cur_f.size, SEEK_CUR);
 					}
 				}
+				printf("quan_del_files = %d\n", quan_del_files);
 				//It's last file
 				if (cur_ + 1 == number_of_files){
+					if (quan_tf > 0) {
+						//quantity of deleted files in this block
+						quan_del_files += quan_tf;
+						printf("quan_del_files = %d\n", quan_del_files);
+						len_del_files += size_tf;
+					}
 					struct stat stbuf;
 					if (stat(gm_her.name, &stbuf) == -1) {
 			        		perror("DON'T CONNECT (STAT()) WITH . (-f)\n");
 					        return 2;
 		        		}
 					if(ftruncate(oSFile, (stbuf.st_size - len_del_files)) == -1){
+						///////////////////////////////////////////////////////////////////////////////////////////////
+						fprintf(stderr, "stbuf.st_size = %zu\tlen_del_files = %zu\nstbuf.st_size - len_del_files) = %zu\n", 
+							stbuf.st_size, len_del_files, (stbuf.st_size - len_del_files));
+						///////////////////////////////////////////////////////////////////////////////////////////////
 						perror("TRUNCATE IS INVALID");
 						return 2;
+					} else {
+						///////////////////////////////////////////////////////////////////////////////////////////////
+						fprintf(stderr, "stbuf.st_size = %zu\tlen_del_files = %zu\nstbuf.st_size - len_del_files) = %zu\n", 
+							stbuf.st_size, len_del_files, (stbuf.st_size - len_del_files));
+						///////////////////////////////////////////////////////////////////////////////////////////////
 					}
 				}
 			}
@@ -441,26 +491,39 @@ int main(int argc, char** argv)
 
 			int ptr;
 			for (ptr = 2; ptr < argc; ++ptr){
-				//!!!MALLOC!!
-				struct File* sel_f = (struct File*)malloc(sizeof(struct File));
-				sel_f->size = 0;
-				sel_f->deleted = false;
-				sel_f->len_name = 0x00;
-				sel_f->name = NULL;
-				if (search_st_f(oSFile, argv[ptr], sel_f)) 
-				{ 	//delete searched file
-					lseek(oSFile, -(sel_f->len_name * sizeof(char) +
-						sizeof(off_t) + sizeof(uint8_t) +
-						sizeof(bool)),
-						SEEK_CUR);
-					sel_f->deleted = true;
-					write(oSFile, &(sel_f->deleted), sizeof(bool));
-				} else 
-					printf("save file havn't %s file\n", sel_f->name);
-				//FREE!!!
-				free(sel_f->name);
-				//FREE!!!
-				free(sel_f);
+				bool same_file = false;
+				if (ptr > 2) {
+					int coun;
+					for (coun = 2; coun < ptr; ++coun) {
+						if (strcmp(argv[coun], argv[ptr]) == 0) {
+							same_file = true;
+							fprintf(stderr, "You print some same files \"%s\", WHY?\n", argv[coun]);
+							break;
+						}
+					}
+				}
+				if (!same_file) {
+					//!!!MALLOC!!
+					struct File* sel_f = (struct File*)malloc(sizeof(struct File));
+					sel_f->size = 0;
+					sel_f->deleted = false;
+					sel_f->len_name = 0x00;
+					sel_f->name = NULL;
+					if (search_st_f(oSFile, argv[ptr], sel_f, &gm_her)) 
+					{ 	//delete searched file
+						lseek(oSFile, -(sel_f->len_name * sizeof(char) +
+							sizeof(off_t) + sizeof(uint8_t) +
+							sizeof(bool)),
+							SEEK_CUR);
+						sel_f->deleted = true;
+						write(oSFile, &(sel_f->deleted), sizeof(bool));
+					} else 
+						fprintf(stderr, "save file havn't \"%s\" file\n", sel_f->name);
+					//FREE!!!
+					free(sel_f->name);
+					//FREE!!!
+					free(sel_f);
+				}
 			}
 		} else if (strcmp((char*)KEY_L, argv[1]) == 0)
 		{	//view list of files in save_file
@@ -483,35 +546,48 @@ int main(int argc, char** argv)
 			
 			int ptr;
 			for (ptr = 2; ptr < argc; ++ptr) {
-				//!!!MALLOC!!
-				struct File* sel_f = (struct File*)malloc(sizeof(struct File));
-				sel_f->size = 0;
-				sel_f->deleted = false;
-				sel_f->len_name = 0x00;
-				sel_f->name = NULL;
-				if (search_st_f(oSFile, argv[ptr], sel_f)){
-					print_st_f(*sel_f);
-					ssize_t siz;
-					off_t size_f = sel_f->size;
-					while (size_f > 0){
-						if ((siz = read(oSFile, buf, MAX_BUF)) < 0){
-							perror("READ SAVE FILE");
+				bool same_file = false;
+				if (ptr > 2) {
+					int coun;
+					for (coun = 2; coun < ptr; ++coun) {
+						if (strcmp(argv[coun], argv[ptr]) == 0) {
+							same_file = true;
+							fprintf(stderr, "You print some same files \"%s\", WHY?\n", argv[coun]);
+							break;
+						}
+					}
+				}
+				if (!same_file) {
+					//!!!MALLOC!!
+					struct File* sel_f = (struct File*)malloc(sizeof(struct File));
+					sel_f->size = 0;
+					sel_f->deleted = false;
+					sel_f->len_name = 0x00;
+					sel_f->name = NULL;
+					if (search_st_f(oSFile, argv[ptr], sel_f, &gm_her)){
+						print_st_f(*sel_f);
+						ssize_t siz;
+						off_t size_f = sel_f->size;
+						while (size_f > 0){
+							if ((siz = read(oSFile, buf, MAX_BUF)) < 0){
+								perror("READ SAVE FILE");
+								return 1;
+							}
+							printf("%s", buf);
+							size_f -= siz;
+						}
+						printf("\n");
+						if (siz == -1){
+							perror("CAN'T READ NEW FILE");
 							return 1;
 						}
-						printf("%s", buf);
-						size_f -= siz;
-					}
-					printf("\n");
-					if (siz == -1){
-						perror("CAN'T READ NEW FILE");
-						return 1;
-					}
-				} else 
-					printf("save file havn't %s file\n", argv[ptr]);
-				//FREE!!!
-				free(sel_f->name);
-				//FREE!!!
-				free(sel_f);
+					} else 
+						printf("save file havn't \"%s\" file\n", argv[ptr]);
+					//FREE!!!
+					free(sel_f->name);
+					//FREE!!!
+					free(sel_f);
+				}
 			}
 		} else if (strcmp((char*)KEY_R, argv[1]) == 0)
 		{	//rename save_file
