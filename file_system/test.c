@@ -121,7 +121,16 @@ bool read_st_f(int main_f, struct File* _cur) {
 }
 
 void rewrite_mu_f(int oSFile, off_t size_ff, off_t size_tf){
-	lseek(oSFile, -size_ff, SEEK_CUR);
+	{
+		off_t ttt;
+		lseek(oSFile, -1, SEEK_CUR);
+		ttt = lseek(oSFile, 1, SEEK_CUR);
+		printf("\n\trewrite 1: lseek = %zu\n", ttt);
+	
+	ttt = lseek(oSFile, -size_ff, SEEK_CUR);
+
+		printf("\n\trewrite 2: lseek = %zu\n", ttt);
+	}
 	//create new buf for more fast copy
 	size_t size_buf_plus = size_ff;
 	//!!!MALLOC!!!
@@ -144,11 +153,22 @@ void rewrite_mu_f(int oSFile, off_t size_ff, off_t size_tf){
 	//rewrite block of NOT deleted files
 	size_ff -= read(oSFile, buf_plus, size_buf_plus);
 	do {
-		lseek(oSFile, -(size_tf + size_buf_plus), SEEK_CUR);
-		write(oSFile, buf_plus, size_buf_plus);
-		lseek(oSFile, size_tf, SEEK_CUR);
+		off_t sss;
+		lseek(oSFile, -1, SEEK_CUR);
+		sss = lseek(oSFile, 1, SEEK_CUR);
+		printf("\t1: lseek = %zu\n", sss);
+		sss = lseek(oSFile, -(size_tf + size_buf_plus), SEEK_CUR);
+		printf("\t2: lseek = %zu\n", sss);
+		ssize_t fff;
+		fff = write(oSFile, buf_plus, size_buf_plus);
+		printf("\t   write = %zu\n", fff);	
+		sss = lseek(oSFile, size_tf, SEEK_CUR);
+		printf("\t3: lseek = %zu\n", sss);
 		if (size_buf_plus > size_ff) size_buf_plus = size_ff;
 	} while (size_ff -= (read(oSFile, buf_plus, size_buf_plus)) > 0);
+	off_t ggg;
+		ggg = lseek(oSFile, -(size_tf), SEEK_CUR);
+		printf("\n\trewrite 3: lseek = %zu\n", ggg);
 	//FREE!!!
 	free(buf_plus);
 }
@@ -385,11 +405,18 @@ int main(int argc, char** argv)
 					print_st_f(cur_f);
 					break;
 				}
-//				print_st_f(cur_f);
+				print_st_f(cur_f);
 				
 				if (cur_f.deleted) {
 					//true
 					if (quan_ff > 0) {
+						lseek(oSFile, -(size_st_f(&cur_f)), SEEK_CUR);
+						{
+							off_t ttt;
+							lseek(oSFile, -1, SEEK_CUR);
+							ttt = lseek(oSFile, 1, SEEK_CUR);
+							printf("\n\t\t\tlseek = %zu\n", ttt);
+						}
 						printf("true:\nsize_ff = %zu\t size_tf = %zu\n", size_ff, size_tf);
 						rewrite_mu_f(oSFile, size_ff, size_tf);
 						//quantity of deleted files in this block
@@ -410,14 +437,21 @@ int main(int argc, char** argv)
 					++quan_tf;
 					size_tf += size_st_f(&cur_f);
 					////////////////////////////////////////////////////
-					fprintf(stderr, "size_tf = %zu\t", size_tf);
+					printf("size_tf = %zu\t", size_tf);
 					////////////////////////////////////////////////////
 
 					lseek(oSFile, cur_f.size, SEEK_CUR);
+					{
+						off_t sss;
+						lseek(oSFile, -1, SEEK_CUR);
+						sss = lseek(oSFile, 1, SEEK_CUR);
+						printf("\n\tcur_f.size = %zu\n", cur_f.size);
+						printf("\n\ttrue lseek = %zu\n", sss);
+					}
 					size_tf += cur_f.size;
 
 					////////////////////////////////////////////////////
-					fprintf(stderr, "size_tf = %zu\n", size_tf);
+					printf("size_tf = %zu\n", size_tf);
 					////////////////////////////////////////////////////	
 				} else {
 					 if(quan_tf > 0) {
@@ -425,14 +459,20 @@ int main(int argc, char** argv)
 						++quan_ff;
 						size_ff += size_st_f(&cur_f);
 						////////////////////////////////////////////////////
-						fprintf(stderr, "size_ff = %zu\t", size_ff);
+						printf("size_ff = %zu\t", size_ff);
 						////////////////////////////////////////////////////
 						
 						lseek(oSFile, cur_f.size, SEEK_CUR);
+						{
+							off_t sss;
+							lseek(oSFile, -1, SEEK_CUR);
+							sss = lseek(oSFile, 1, SEEK_CUR);
+							printf("\n\tfalse lseek = %zu", sss);
+						}
 						size_ff += cur_f.size;
 
 						////////////////////////////////////////////////////
-						fprintf(stderr, "size_ff = %zu\n", size_ff);
+						printf("size_ff = %zu\n", size_ff);
 						////////////////////////////////////////////////////
 						//It's last deleted(false) file
 						if ((cur_ + 1 == number_of_files)){
@@ -444,9 +484,21 @@ int main(int argc, char** argv)
 						}
 					} else {
 						lseek(oSFile, cur_f.size, SEEK_CUR);
+						{
+							off_t sss;
+							lseek(oSFile, -1, SEEK_CUR);
+							sss = lseek(oSFile, 1, SEEK_CUR);
+							printf("\n\tfalse false lseek = %zu", sss);
+						}
 					}
 				}
-				printf("quan_del_files = %d\n", quan_del_files);
+				{
+					off_t ttt;
+					lseek(oSFile, -1, SEEK_CUR);
+					ttt = lseek(oSFile, 1, SEEK_CUR);
+					printf("\n\t\t\tlseek = %zu", ttt);
+					printf("quan_del_files = %d\n", quan_del_files);
+				}
 				//It's last file
 				if (cur_ + 1 == number_of_files){
 					if (quan_tf > 0) {
