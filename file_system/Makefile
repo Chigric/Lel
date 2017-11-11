@@ -1,4 +1,4 @@
 all:
-	gcc test.c -o tt -Wall -g
+	gcc main.c -o tt -Wall -g
 clean:
-	rm tt file2.gm11
+	rm tt save.gm11
