@@ -28,15 +28,22 @@ bool rdon = true;//second process
 void signal_handler(int signal)
 {
 	if (signal == SIGINT) {	
-		shmdt(shmlink);//attaches the shared memory
+		if (shmdt(shmlink)) {//attaches the shared memory
+			perror("shmdt");
+			exit(EXIT_FAILURE);
+		}
 		if (!rdon)
-			shmctl(shmid, IPC_RMID, NULL);//mark the segment to be destroyed
+			if (shmctl(shmid, IPC_RMID, NULL) == -1) {//mark the segment to be destroyed
+				perror("shmctl");
+				exit(EXIT_FAILURE);
+			}
 		exit(EXIT_SUCCESS);
 	}
 }
 
 int main()
 {
+	setbuf(stdout, NULL);
 	//magic. Now it is'n magic(.
 	signal(SIGINT, signal_handler);
 
@@ -50,7 +57,7 @@ int main()
 	shmid = shmget(key, SIZE, 0);
 	if (shmid == -1) {
 		rdon = false;
-		shmid = shmget(key, SIZE, IPC_CREAT | 0777);
+		shmid = shmget(key, SIZE, IPC_CREAT | 0776);
 		if (shmid == -1) {
 			perror("shmget");
 			return 1;
