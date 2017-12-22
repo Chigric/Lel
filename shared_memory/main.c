@@ -47,12 +47,13 @@ int main()
 	//magic. Now it is'n magic(.
 	signal(SIGINT, signal_handler);
 
-	int	id = 5;
-	key_t key = ftok("main.c", id);
+	int	id = 6;
+	key_t key = ftok("../README.md", id);
 	if (key == -1){
 		perror("ftok");
 		return 1;
 	}
+	printf("%x\n", (unsigned int)key);
 	
 	shmid = shmget(key, SIZE, 0);
 	if (shmid == -1) {
@@ -74,11 +75,13 @@ int main()
 	struct passwd *pas = getpwuid(uid);
 	time_t realTime = NULL;
 	if (rdon) {
+		printf("read:\n");
 		while(1){
 			sleep(1);
 			printf("your time Mr.%s\t%s", pas->pw_name, (char*)shmlink);
 		}
 	} else {
+		printf("write:\n");
 		for(;;){
 			sleep(1);	
 			time(&realTime);

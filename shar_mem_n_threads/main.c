@@ -42,7 +42,8 @@ void signal_handler(int signal)
 }
 
 void* read_th(void* c_)
-{//read from shared memory and print to term. 
+{//read from shared memory and print to term.
+	 
 	while(true) {	
 		sleep(1);
 		pthread_mutex_lock(&mutex);
@@ -69,7 +70,7 @@ void* write_th(void* c_)
 
 int main()
 {
-	printf("TREAD_ID - real_Time\n");
+	printf("Example: TREAD_ID - real_Time\n");
 	//magic. Now it is'n magic(.
 	signal(SIGINT, signal_handler);
 
@@ -80,12 +81,13 @@ int main()
 		return 2;
 	}
 
-	int	id = 5;
-	key_t key = ftok("main.c", id);
+	int	id = 6;
+	key_t key = ftok("../README.md", id);
 	if (key == -1){
 		perror("ftok");
 		return 1;
 	}
+	printf("%x\n", (unsigned int)key);
 	
 	shmid = shmget(key, SIZE, 0);
 	if (shmid == -1) {
@@ -105,10 +107,12 @@ int main()
 	
 	int count;
 	if (rdon) {
+		printf("read:\n");
 		for(count = 0; count < QUAN_TH; count++){
 			pthread_create(&(pth[count]), NULL, &read_th, NULL);//thread for read
 		}
 	} else {
+		printf("write:\n");
 		for(count = 0; count < QUAN_TH; ++count){
 			pthread_create(&(pth[count]), NULL, &write_th, NULL);//thread for write
 		}
