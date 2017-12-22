@@ -16,6 +16,8 @@
 //bool
 #include <unistd.h>
 //sleep()
+#include <pwd.h>
+//struct passwd
 
 #define SIZE 128
 	
@@ -61,15 +63,17 @@ int main()
 		return 1;
 	}
 	
+	uid_t uid = getuid();
+	struct passwd *pas = getpwuid(uid);
+	time_t realTime = NULL;
 	if (rdon) {
 		while(1){
 			sleep(1);
-			printf("\t%s\n", (char*)shmlink);
+			printf("your time Mr.%s\t%s", pas->pw_name, (char*)shmlink);
 		}
 	} else {
 		for(;;){
-			sleep(1);
-			time_t realTime = NULL;
+			sleep(1);	
 			time(&realTime);
 			sprintf((char*)shmlink, "%s", ctime(&realTime));
 		}
